@@ -57,10 +57,10 @@ The AI agent uses **OpenAI GPT models** with enhanced prompts designed to maximi
 
 **Data Flow:**
 
-```mermaid
 flowchart LR
-    A[Parent/User] -->|POST /auth/login or /register| B[Flask API]
-    B --> C[Auth Service (users.py)]
-    B --> D[AI Service (ai.py)]
+    A["Parent/User"] -->|POST /auth/login or /register| B["Flask API"]
+    B --> C["Auth Service - users.py"]
+    B --> D["AI Service - ai.py"]
     D -->|AI Response| B
     B -->|Return JSON| A
+
