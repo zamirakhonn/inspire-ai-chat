@@ -69,7 +69,7 @@ The AI agent uses **OpenAI GPT models** with enhanced prompts to maximize empath
 
 ---
 
-![Architecture Diagram](docs/architecture.png)
+
 
 📂 Documentation & Visuals
 
