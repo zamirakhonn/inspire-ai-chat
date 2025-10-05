@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Inspire AI Chatbot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { overflow: hidden; font-family: 'Inter', sans-serif; }
+    
+    /* Bubble background */
+    .bubble {
+      position: absolute;
+      bottom: -100px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 50%;
+      animation: rise 20s infinite ease-in;
+    }
+    @keyframes rise {
+      0% { transform: translateY(0) scale(1); opacity: 0.7; }
+      100% { transform: translateY(-120vh) scale(1.4); opacity: 0; }
+    }
+
+    /* Fade-in for messages */
+    .fade-in { animation: fadeIn 0.5s ease-in-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .timestamp {
+      font-size: 0.65rem;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    /* Scrollbar style */
+    #chat-box::-webkit-scrollbar {
+      width: 6px;
+    }
+    #chat-box::-webkit-scrollbar-thumb {
+      background: #a78bfa;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-r from-indigo-200 via-purple-200 to-pink-200 flex items-center justify-center min-h-screen relative">
+
+  <!-- Bubble background -->
+  <div id="bubbles"></div>
+
+  <!-- Chat container -->
+  <div class="relative z-10 flex flex-col md:flex-row items-start justify-center w-full max-w-6xl p-6 space-y-6 md:space-y-0 md:space-x-6">
+    
+    <!-- Chat UI -->
+    <div class="w-full md:w-1/2 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-6 flex flex-col">
+      <h1 class="text-3xl font-bold text-center text-indigo-700 mb-4">🌿 Inspire AI</h1>
+
+      <!-- Chat messages -->
+      <div id="chat-box" class="flex-1 h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50 mb-4 space-y-4">
+        <div class="flex items-start space-x-2 fade-in">
+          <div class="w-10 h-10 flex items-center justify-center bg-green-200 rounded-full">🌿</div>
+          <div>
+            <div class="bg-green-100 text-green-800 px-4 py-2 rounded-xl max-w-xs">
+              Привет! 🌸 Я Inspire AI — твой позитивный помощник. Как у тебя дела сегодня?
+            </div>
+            <div class="timestamp">🕒 сейчас</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="flex space-x-2">
+        <input id="user-input" type="text" placeholder="Напиши сообщение..."
+          class="flex-1 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <button id="send-btn"
+          class="bg-indigo-600 text-white px-5 py-3 rounded-xl hover:bg-indigo-700 transition-colors duration-200">Отправить</button>
+      </div>
+    </div>
+
+    <!-- Illustration -->
+    <div class="hidden md:flex w-1/2 justify-center">
+      <img src="{{ url_for('static', filename='assel.jpeg') }}" 
+           alt="Illustration"
+           class="w-80 h-96 object-cover rounded-2xl shadow-xl fade-in">
+    </div>
+  </div>
+
+  <script>
+    // Background bubbles
+    function createBubbles() {
+      const bubbles = document.getElementById("bubbles");
+      for (let i = 0; i < 20; i++) {
+        const bubble = document.createElement("div");
+        const size = Math.random() * 60 + 20;
+        bubble.classList.add("bubble");
+        bubble.style.width = `${size}px`;
+        bubble.style.height = `${size}px`;
+        bubble.style.left = `${Math.random() * 100}vw`;
+        bubble.style.animationDuration = `${10 + Math.random() * 15}s`;
+        bubbles.appendChild(bubble);
+      }
+    }
+    createBubbles();
+
+    // Format AI reply into cards
+    function formatReply(reply) {
+      const parts = reply.split(/\d[\.\)]|[\n]/).filter(Boolean);
+      if (parts.length === 1) return `<div class="bg-green-100 text-green-800 px-3 py-2 rounded-xl my-1">${reply}</div>`;
+      return parts.map(p => 
+        `<div class="bg-green-100 text-green-800 px-3 py-2 rounded-xl my-1">🌿 ${p.trim()}</div>`
+      ).join("");
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById("user-input");
+      const message = input.value.trim();
+      if (!message) return;
+
+      const chatBox = document.getElementById("chat-box");
+      const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+      // User message
+      chatBox.innerHTML += `
+        <div class="flex items-start justify-end space-x-2 fade-in">
+          <div>
+            <div class="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-xl max-w-xs">${message}</div>
+            <div class="timestamp text-right">🕒 ${time}</div>
+          </div>
+          <div class="w-10 h-10 flex items-center justify-center bg-indigo-200 rounded-full">👤</div>
+        </div>`;
+      input.value = "";
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // Typing indicator
+      const typing = document.createElement("div");
+      typing.id = "typing";
+      typing.className = "flex items-start space-x-2 fade-in";
+      typing.innerHTML = `
+        <div class="w-10 h-10 flex items-center justify-center bg-green-200 rounded-full">🌿</div>
+        <div class="bg-gray-200 text-gray-600 px-3 py-2 rounded-xl animate-pulse">AI печатает...</div>`;
+      chatBox.appendChild(typing);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+        const data = await response.json();
+        typing.remove();
+
+        chatBox.innerHTML += `
+          <div class="flex items-start space-x-2 fade-in">
+            <div class="w-10 h-10 flex items-center justify-center bg-green-200 rounded-full">🌿</div>
+            <div>
+              <div class="flex flex-col space-y-1">${formatReply(data.reply)}</div>
+              <div class="timestamp">🕒 ${data.time}</div>
+            </div>
+          </div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+      } catch (err) {
+        typing.remove();
+        chatBox.innerHTML += `
+          <div class="flex items-start space-x-2 fade-in">
+            <div class="w-10 h-10 flex items-center justify-center bg-green-200 rounded-full">🌿</div>
+            <div class="bg-red-100 text-red-800 px-3 py-2 rounded-xl">⚠️ Ошибка: ${err}</div>
+          </div>`;
+      }
+    }
+
+    // Send message on Enter
+    document.getElementById("user-input").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") sendMessage();
+    });
+    document.getElementById("send-btn").addEventListener("click", sendMessage);
+  </script>
+</body>
+</html>
