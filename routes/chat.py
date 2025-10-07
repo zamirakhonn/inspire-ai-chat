@@ -1,18 +1,19 @@
 from flask_restx import Namespace, Resource, fields
-from flask import session
-from services.ai import generate_response
-from services.history import get_chat_history, add_to_history
+from flask import request
 from datetime import datetime
+from services.ai import generate_reply
+from services.history import get_chat_history, add_to_history
 
 ns = Namespace("chat", description="Chat with Inspire AI")
 
 chat_request = ns.model("ChatRequest", {
-    "message": fields.String(required=True)
+    "user_id": fields.String(required=True, description="User unique ID or token"),
+    "message": fields.String(required=True, description="User message to chatbot")
 })
 
 chat_response = ns.model("ChatResponse", {
-    "reply": fields.String,
-    "time": fields.String
+    "reply": fields.String(description="AI assistant's response"),
+    "time": fields.String(description="Response timestamp"),
 })
 
 @ns.route("/")
@@ -20,18 +21,34 @@ class Chat(Resource):
     @ns.expect(chat_request)
     @ns.marshal_with(chat_response)
     def post(self):
-        user_id = session.get("user_id", "demo_user")  # Placeholder
-        message = self.api.payload.get("message", "").strip()
-        if not message:
-            return {"reply": "⚠️ Send a message.", "time": datetime.now().strftime("%H:%M")}
+        """Chat with Inspire AI"""
+        data = request.get_json()
+        user_id = data.get("user_id", "anonymous_user").strip()
+        message = data.get("message", "").strip()
 
-        add_to_history(user_id, "user", message)
+        if not message:
+            return {"reply": "⚠️ Please send a valid message.", "time": datetime.now().strftime("%H:%M")}
+
         try:
-            answer = generate_response(message, get_chat_history(user_id))
-            add_to_history(user_id, "assistant", answer)
-            return {"reply": answer, "time": datetime.now().strftime("%H:%M")}
+            # Save user message to history
+            add_to_history(user_id, "user", message)
+
+            # Generate assistant reply
+            reply = generate_reply(user_id, message)
+
+            # Save AI reply to history
+            add_to_history(user_id, "assistant", reply)
+
+            return {"reply": reply, "time": datetime.now().strftime("%H:%M")}
         except Exception as e:
-            return {"reply": f"⚠️ Error: {str(e)}", "time": datetime.now().strftime("%H:%M")}
+            return {
+                "reply": f"⚠️ Internal error: {str(e)}",
+                "time": datetime.now().strftime("%H:%M")
+            }
 
     def get(self):
-        return {"reply": "Use POST with JSON {'message':'your text'}", "time": datetime.now().strftime("%H:%M")}
+        """Info route"""
+        return {
+            "reply": "Use POST with JSON: {'user_id': 'your_id', 'message': 'your text'}",
+            "time": datetime.now().strftime("%H:%M")
+        }

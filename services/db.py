@@ -1,20 +1,58 @@
-# Placeholder for database connection
-# Later you can connect SQLite/PostgreSQL
-def get_affirmations():
-    return [
-        "Ты делаешь огромный шаг вперёд 🌟",
-        "Любовь — это терапия 💚",
-        "Ты создаёшь стабильность для своего ребёнка 🌱",
-        "Замечай маленькие улучшения каждый день ✨"
-    ]
+# services/db.py
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship
+from datetime import datetime
+import os
 
-# Placeholder diary storage
-diary_storage = {}
+# -----------------------------
+# Database setup
+# -----------------------------
+DB_URL = os.getenv("DATABASE_URL", "sqlite:///inspire.db")
+engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
 
-def add_diary_entry(user_id, entry):
-    if user_id not in diary_storage:
-        diary_storage[user_id] = []
-    diary_storage[user_id].append(entry)
 
-def get_diary(user_id):
-    return diary_storage.get(user_id, [])
+# -----------------------------
+# Models
+# -----------------------------
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    messages = relationship("Message", back_populates="user")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    role = Column(String(50))  # "user" or "assistant"
+    content = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="messages")
+
+
+# -----------------------------
+# Utility functions
+# -----------------------------
+def init_db():
+    """Create all database tables."""
+    Base.metadata.create_all(bind=engine)
+
+
+def get_or_create_user(session, user_identifier: str):
+    """Find user by identifier or create if not exists."""
+    user = session.query(User).filter_by(user_id=user_identifier).first()
+    if not user:
+        user = User(user_id=user_identifier, name=user_identifier)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    return user
