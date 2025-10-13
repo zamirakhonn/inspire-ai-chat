@@ -3,6 +3,7 @@ from flask_restx import Api, Resource, fields
 from dotenv import load_dotenv
 from datetime import datetime
 import os
+import socket
 
 # Import your AI and history logic
 from services import ai
@@ -43,9 +44,9 @@ class Chat(Resource):
     @chat_ns.marshal_with(chat_response)
     def post(self):
         """Send a message and receive an AI-generated reply."""
-        data = request.json
+        data = request.json or {}
         user_id = data.get("user_id", "guest_user")
-        message = data.get("message", "").strip()
+        message = (data.get("message") or "").strip()
 
         if not message:
             return {"reply": "⚠️ Please send a message.", "time": datetime.now().strftime("%H:%M")}, 400
@@ -55,10 +56,20 @@ class Chat(Resource):
 
         try:
             # Generate AI response using chat history context
-            answer = ai.generate_response(message, get_chat_history(user_id))
-            add_to_history(user_id, "assistant", answer)
+            history = get_chat_history(user_id)
+            answer_obj = ai.generate_response(message, history, user_id=user_id)
 
-            return {"reply": answer, "time": datetime.now().strftime("%H:%M")}
+            # answer_obj can be either a string (old behaviour) or structured dict
+            if isinstance(answer_obj, dict):
+                reply_text = answer_obj.get("reply") or answer_obj.get("text") or ""
+                # If AI returned structured analysis, also log the assistant reply
+                add_to_history(user_id, "assistant", reply_text)
+                return {"reply": reply_text, "time": datetime.now().strftime("%H:%M")}
+            else:
+                # simple string reply
+                add_to_history(user_id, "assistant", str(answer_obj))
+                return {"reply": str(answer_obj), "time": datetime.now().strftime("%H:%M")}
+
         except Exception as e:
             return {"reply": f"⚠️ Server error: {str(e)}", "time": datetime.now().strftime("%H:%M")}, 500
 
@@ -70,6 +81,26 @@ class Chat(Resource):
 # Register namespace
 api.add_namespace(chat_ns)
 
-# ----------------- Run App -----------------
+# ----------------- Run App (with port fallback) -----------------
+
+def find_free_port(preferred=5001, fallback=5002):
+    # try preferred then fallback, then ask OS
+    for p in (preferred, fallback):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                continue
+    # last resort: let OS assign a free port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+    
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    preferred = int(os.environ.get("PREFERRED_PORT", 5001))
+    port_to_use = find_free_port(preferred=preferred, fallback=5002)
+    print(f"Starting server on http://0.0.0.0:{port_to_use}")
+    app.run(host="0.0.0.0", port=port_to_use, debug=True)
+
